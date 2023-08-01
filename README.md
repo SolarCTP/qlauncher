@@ -10,6 +10,9 @@ It runs in the background until you press the hotkey to open it (`Win + Enter` b
 Now you have set an application to that button, and you will be able to launch it by pressing the corresponding F key that is labeled on the right side of the button.
 All the set apps are stored in a [Yaml](https://it.wikipedia.org/wiki/YAML) file called `config.yaml`, which is loaded on startup (TODO: check if the config's yaml syntax is respected, or else the launcher might crash) and updated every time an app on a button is set/changed
 
+## Usage
+If you're using the binary, just run that. If you're using it from source, run `main.py` directly.
+
 ## TODO
 Pre-alpha:
 - Global hotkey to open the launcher
