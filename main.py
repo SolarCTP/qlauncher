@@ -261,6 +261,7 @@ class App:
                 quit(1)
 
         # draws once before event loop. elements are rendered again only when actual changes happen
+        # to decrease useless operations
         self.draw()
 
         clk = pg.time.Clock()
