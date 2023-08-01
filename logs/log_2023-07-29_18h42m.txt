@@ -1,0 +1,11 @@
+The Witness - x64 - D3D11 - Final (Steam)
+Version 1.070M
+Built 2019/01/23 12:30:49 from 172984
+Date: 2023/06/29 Time: 18:42:31
+Args: 
+Init app:
+    Init core:
+        Init asset loader:
+            error : opening bundle file data-pc.zip (data-pc.zip)
+            0.92 ms elapsed
+        warning : 'All.variables' failed to load!

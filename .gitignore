@@ -1,0 +1,11 @@
+./.vscode
+./appicons
+./__pycache__
+./*.exe
+./*.spec
+./build
+./dist
+./logs
+./idee*
+./config.yaml
+./*.code-workspace
