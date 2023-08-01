@@ -1,6 +1,0 @@
-https://excalidraw.com/#room=9c9a37e35d1040ed5f1d,Ii-HZiFmwpu-kOQkovRG5g
-https://prod.liveshare.vsengsaas.visualstudio.com/join?1B664FFF6158A59B25E97538FA82807CD9E7
-
-- quando clicchi il pulsante +, si apre il dialogo explorer di windows dove puoi scegliere l'app da associare a quel pulsante
-- dopo che hai scelto l'app, sul pulsante compare la sua icona
-- json sistema save&load

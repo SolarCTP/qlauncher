@@ -1,6 +1,6 @@
 ./.vscode
 appicons/**
-./__pycache__
+__pycache__/**
 ./*.exe
 ./*.spec
 build/**

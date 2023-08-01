@@ -6,7 +6,7 @@ from tkinter import filedialog
 import win32api
 import win32con
 import win32gui
-from subprocess import call
+from subprocess import run
 from os import mkdir, remove
 from os.path import isdir, exists
 import icoextract
@@ -66,15 +66,14 @@ class App:
         # initialize global hotkey
 
     def run_application(self, cell: layout.Cell):
-        cmd = "cmd /C \"start \"" + cell.button["application_path"] + "\"\""
-        call(cmd, shell=False)
+        cmd = ["start", cell.button["application_path"]]
+        run(cmd, shell=False)
 
     def handle_kbd_input(self) -> None:
         for key in self.input_map.keys():
-                if pg.key.get_pressed()[key]:
+                if pg.key.get_pressed()[key] and not pg.key.get_mods(): # E.g. ALT+F4 should not trigger the F4 button
                     cell = self.grid._get_cell_from_id(self.input_map[key])
-                    cmd = ["cmd", "/C", "start", cell.button["application_path"]]
-                    call(cmd, shell=False)
+                    self.run_application(cell)
                     pg.display.iconify()
     
     def set_apps_from_config(self) -> None:
