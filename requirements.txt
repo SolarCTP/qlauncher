@@ -1,0 +1,9 @@
+icoextract==0.1.4
+pefile==2023.2.7
+pygame==2.5.0
+pynput==1.7.6
+pywin32==306
+PyYAML==6.0.1
+screeninfo==0.8.1
+six==1.16.0
+tk==0.1.0

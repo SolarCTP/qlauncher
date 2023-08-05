@@ -164,3 +164,10 @@ config.json
 
 # Cached icons
 appicons/
+
+# Venv stuff
+Scripts/
+Include/
+Lib/
+
+pyvenv.cfg
