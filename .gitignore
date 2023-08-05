@@ -160,7 +160,7 @@ cython_debug/
 #.idea/
 
 # Personal configuration
-config.json
+config.yaml
 
 # Cached icons
 appicons/

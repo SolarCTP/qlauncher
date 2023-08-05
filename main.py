@@ -288,7 +288,10 @@ class App:
 def main():
     app = App()
     app.global_hotkey_listener.start()
-    app.run()
+    try:
+        app.run()
+    except KeyboardInterrupt:
+        print("quit")
     
 
 if __name__ == "__main__":
