@@ -6,13 +6,14 @@ from tkinter import filedialog
 import win32api
 import win32con
 import win32gui
-from subprocess import run
+from subprocess import Popen, DETACHED_PROCESS
 from os import mkdir, remove
 from os.path import isdir, exists
 import icoextract
 from PIL import Image
 from pynput import keyboard as kbd
-import threading
+from configparser import ConfigParser
+import webbrowser
 
 class DefaultIcons:
     UNSET = pg.image.load("./assets/buttonicons/newapp.png")
@@ -51,7 +52,7 @@ class App:
             pg.K_F7: 6,
             pg.K_F8: 7,
             pg.K_F9: 8,
-            pg.K_F1: 9,
+            pg.K_F10: 9,
             pg.K_F11: 10,
             pg.K_F12: 11
         }
@@ -66,15 +67,18 @@ class App:
         # initialize global hotkey
 
     def run_application(self, cell: layout.Cell):
-        cmd = ["start", cell.button["application_path"]]
-        run(cmd, shell=False)
+        if cell._get_application_extension() == ".url":
+            webbrowser.open(cell.button["application_path"])
+        else:
+            cmd = [cell.button["application_path"]]
+            Popen(cmd, creationflags=DETACHED_PROCESS)
 
     def handle_kbd_input(self) -> None:
         for key in self.input_map.keys():
-                if pg.key.get_pressed()[key] and not pg.key.get_mods(): # E.g. ALT+F4 should not trigger the F4 button
-                    cell = self.grid._get_cell_from_id(self.input_map[key])
-                    self.run_application(cell)
-                    pg.display.iconify()
+            if pg.key.get_pressed()[key] and not (pg.key.get_mods() & pg.KMOD_ALT): # E.g. ALT+F4 should not trigger the F4 button
+                cell = self.grid._get_cell_from_id(self.input_map[key])
+                self.run_application(cell)
+                pg.display.iconify()
     
     def set_apps_from_config(self) -> None:
         """"SETTER - Reads config and sets path and name for every application. To be run on startup."""
@@ -137,20 +141,33 @@ class App:
 
 
     def save_icon_to_file(self, cell: layout.Cell) -> None:
-        """Uses the icoextract module to save an app's icon from it's path with a specified name in the folder './appicons'"""
+        """Uses the icoextract module to save an app's icon from it's path with a specified name in the folder './appicons'.
+        If it's a URL file (which is just an INI configuration file in disguise), the app path and icon path are read from it."""
         # create directory "appicons" if it doesn't exist, then execute icoextract and put the icon in that directory
         if not isdir("./appicons"):
             mkdir("./appicons", mode=755) # perms: read/write/exec for owner, read/write for group and others
         # cmd = "cmd /c \"icoextract.exe \"" + cell.button['application_path'].replace('/', '\\') + "\" \".\\appicons\\" + cell._get_application_name_no_ext() + "\"\""
         try:
-            extractor = icoextract.IconExtractor(cell.button["application_path"])
-            ico_file_path = cell.button["app_icon_path"][:-4:] + '.ico'
-            extractor.export_icon(ico_file_path)
-            with Image.open(ico_file_path) as ico_file:
-                ico_file.save(cell.button["app_icon_path"])
-            remove(ico_file_path)
+            if cell._get_application_extension() == ".exe":
+                extractor = icoextract.IconExtractor(cell.button["application_path"])
+                ico_file_path = cell.button["app_icon_path"][:-4:] + '.ico'
+                extractor.export_icon(ico_file_path)
+                with Image.open(ico_file_path) as ico_file:
+                    ico_file.save(cell.button["app_icon_path"])
+                remove(ico_file_path)
+
+            elif cell._get_application_extension() == ".url":
+                ini_parser = ConfigParser()
+                ini_parser.read(cell.button["application_path"])
+                print(ini_parser.sections())
+                cell.button["application_path"] = ini_parser.get("InternetShortcut", "URL", raw=True)
+                ico_file_path = ini_parser.get("InternetShortcut", "IconFile", raw=True)
+                with Image.open(ico_file_path) as ico_file:
+                    ico_file.save(cell.button["app_icon_path"])
+
         except icoextract.NoIconsAvailableError:
             print('WARNING - No icon avaible for ' + cell.button['application_name'])
+
         except FileNotFoundError as e:
             print(cell.button["app_icon_path"])
             print("FROM save_icon_to_file: " + str(e))
@@ -178,7 +195,8 @@ class App:
                             ("Executable program (legacy)", "*.com"),
                             ("Batch script", "*.bat"),
                             ("Python script", "*.py"),
-                            ("Powershell script", "*.ps1")
+                            ("Powershell script", "*.ps1"),
+                            ("Steam links", ".url")
                         )
                         selected_app: str = filedialog.askopenfilename(filetypes=executable_filetypes,
                                                                   title=f"Please choose the program for button ID {cell.id}")
@@ -203,13 +221,17 @@ class App:
                             print("here is your vomit cascade of a python traceback lmao")
                             raise(e)
 
-                        # - Extract icon from exe files only
-                        if cell._get_application_extension() == '.exe':
-                            cell._set_application_icon_path_from_name()
-                            self.save_icon_to_file(cell)
+                        # - Extract icon from exe files
+                        # if cell._get_application_extension() == '.exe':
+                        cell._set_application_icon_path_from_name()
+                        self.save_icon_to_file(cell)
 
-                            # - Update the cell icon
-                            self.draw()
+                        # - Update the cell icon
+                        self.draw()
+
+                        # if cell._get_application_extension() == '.url':
+                            
+                        
                         break
 
     def handle_quit_events(self) -> bool:
@@ -218,11 +240,13 @@ class App:
         for event in pg.event.get():
                 if event.type == pg.QUIT:
                     return False
+        if pg.key.get_pressed()[pg.K_ESCAPE]:
+            return False
         return True
     
     def handle_minimize_events(self) -> None:
         """Minimizes the window if either ESC or Q is pressed"""
-        if pg.key.get_pressed()[pg.K_ESCAPE] or pg.key.get_pressed()[pg.K_q]:
+        if pg.key.get_pressed()[pg.K_q]:
             pg.display.iconify()
     
     def set_window_transparent(self):
