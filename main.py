@@ -134,7 +134,6 @@ class App:
                 button_icon_scaled = pg.transform.scale(pg.image.load(cell.button["app_icon_path"]).convert_alpha(),
                                                     (cell.button["side_length"], cell.button["side_length"]))
                 self.window.blit(button_icon_scaled, cell.button_rect)
-                # print("RENDERED ->" + cell.button["app_icon_path"]) # DEBUG
             else:
                 self.window.blit(pg.transform.scale(AppIcons.UNSET, (cell.button["side_length"], cell.button["side_length"])), cell.button_rect)
            
@@ -165,11 +164,9 @@ class App:
         # create directory "appicons" if it doesn't exist, then execute icoextract and put the icon in that directory
         if not isdir("./appicons"):
             mkdir("./appicons", mode=755) # perms: read/write/exec for owner, read/write for group and others
-        # cmd = "cmd /c \"icoextract.exe \"" + cell.button['application_path'].replace('/', '\\') + "\" \".\\appicons\\" + cell._get_application_name_no_ext() + "\"\""
         try:
             if cell._get_application_extension() == ".lnk":
                 print(cell.button["application_path"])
-                # lnk_file = lnk.Lnk(cell.button["application_name"])
                 lnk_file = lnk.Lnk(cell.button["application_path"])
                 if lnk_file.icon == None or lnk_file.icon.endswith(".exe"):
                     self._extract_icon_from_exe(cell=cell, from_lnk_file=True)
