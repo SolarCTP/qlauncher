@@ -333,19 +333,15 @@ class App:
         # Load configuration
         try:
             self.config = self.loader._load()
-            # print("loaded configuration")
             self.set_apps_from_config()
             self.extract_icons_from_config()
-            # self.
 
         except FileNotFoundError as excp:
 
             print(str(excp.with_traceback(None))) # DEBUG
 
-            # print("specified config file does not exist. creating one...")
             try:
                 self.loader._save(self.config)
-                # print('config file created')
             except:
                 print("could not create file. quitting...")
                 quit(1)
