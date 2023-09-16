@@ -14,8 +14,6 @@ All the set apps are stored in a [Yaml](https://it.wikipedia.org/wiki/YAML) file
 If you're using the binary, just run that. If you're using it from source, run `main.py` directly.
 
 ## TODO
-Pre-alpha:
-- Global hotkey to open the launcher
 
 Alpha:
 - Implement logging through the corresponding python module
@@ -24,7 +22,7 @@ Alpha:
   - Set background image
   - Background opacity
 - Ability to move around applications
-- Nicer text handling for the app name labels
+- Systray integration
 
 Beta:
 - Some animations, should be customizable
