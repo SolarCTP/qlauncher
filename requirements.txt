@@ -3,7 +3,11 @@ keyboard==0.13.5
 pefile==2023.2.7
 Pillow==10.0.0
 pygame==2.5.0
+PyGetWindow==0.0.9
+pylnk3==0.4.2
 pynput==1.7.6
+PyRect==0.2.0
+pystray==0.19.4
 pywin32==306
 PyYAML==6.0.1
 screeninfo==0.8.1
