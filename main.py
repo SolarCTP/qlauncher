@@ -1,7 +1,4 @@
 import pygame as pg
-import screenutils
-import layout
-import loader
 from tkinter import filedialog
 import win32api
 import win32con
@@ -11,11 +8,23 @@ from os import mkdir, remove
 from os.path import isdir, exists
 import icoextract
 from PIL import Image
-from pynput import keyboard as kbd
+import keyboard
 from configparser import ConfigParser
 import webbrowser
+import pylnk3 as lnk
 
-class DefaultIcons:
+import screenutils
+import layout
+import loader
+from appevents import *
+import winutils
+
+import pystray as tray
+from PIL import Image
+
+import traceback
+
+class AppIcons:
     UNSET = pg.image.load("./assets/buttonicons/newapp.png")
     CUSTOMIZATION = pg.image.load("./assets/settings/customization.png")
     SETTINGS = pg.image.load("./assets/settings/settings.png")
@@ -27,7 +36,7 @@ class App:
     DEFAULT_WINDOW_SCALE_FACTOR: float = 0.75
 
     def __init__(self,
-        window_resolution: tuple = screenutils.get_window_resolution(DEFAULT_WINDOW_SCALE_FACTOR),
+        window_resolution: tuple = screenutils.calc_window_resolution(DEFAULT_WINDOW_SCALE_FACTOR),
         bg_opacity: int = 50):
         pg.init()
         self.resolution = window_resolution
@@ -36,12 +45,8 @@ class App:
         self.config: dict = {}
         self.loader = loader.Loader("./config.yaml")
         self._running = True
-        self.global_hotkey_listener = kbd.GlobalHotKeys(
-            {
-                "<alt>+<enter>": self.cb_global_hotkey_pressed
-            }
-        )
-        self.global_hotkey_listener.daemon = True
+        self._autominimize_needed = False
+
         self.input_map = {
             pg.K_F1: 0,
             pg.K_F2: 1,
@@ -56,7 +61,8 @@ class App:
             pg.K_F11: 10,
             pg.K_F12: 11
         }
-        
+        self._keydown = False
+
         # font setup
         pg.font.init()
         self.main_font = pg.font.SysFont("Segoe UI", 24, bold=True)
@@ -65,20 +71,30 @@ class App:
         self.grid = layout.Grid(rows=3, columns=4)
 
         # initialize global hotkey
+        keyboard.add_hotkey("alt+shift+enter", self.cb_global_hotkey_pressed)
 
-    def run_application(self, cell: layout.Cell):
+    def run_application(self, cell: layout.Cell) -> None:
         if cell._get_application_extension() == ".url":
             webbrowser.open(cell.button["application_path"])
+            return
+        elif cell._get_application_extension() == ".lnk":
+            lnk_file = lnk.Lnk(cell.button["application_path"])
+            cmd = [lnk_file.path] # read exe from .lnk file
+            print("Running: " + cmd[0]) # debug
+            Popen(cmd,
+                  creationflags=DETACHED_PROCESS,
+                  shell=True if "%" in cmd[0] else False #use shell if there are any %env_variables%
+                  )
+            print("successful")
         else:
             cmd = [cell.button["application_path"]]
-            Popen(cmd, creationflags=DETACHED_PROCESS)
+            print("Running: " + cmd[0]) # debug
+            if cmd.count("") == 0:
+                Popen(cmd, creationflags=DETACHED_PROCESS)
+                print("succesful!")
 
-    def handle_kbd_input(self) -> None:
-        for key in self.input_map.keys():
-            if pg.key.get_pressed()[key] and not (pg.key.get_mods() & pg.KMOD_ALT): # E.g. ALT+F4 should not trigger the F4 button
-                cell = self.grid._get_cell_from_id(self.input_map[key])
-                self.run_application(cell)
-                pg.display.iconify()
+
+                
     
     def set_apps_from_config(self) -> None:
         """"SETTER - Reads config and sets path and name for every application. To be run on startup."""
@@ -101,8 +117,6 @@ class App:
         
         self.window.fill(pg.Color(0,0,0))
         for cell in self.grid.cells:
-
-
             keybind_text = self.main_font.render('F' + str(cell.id + 1), True, "white")
             keybind_text_width = keybind_text.get_width()
             keybind_text_height = keybind_text.get_height()
@@ -120,25 +134,30 @@ class App:
                 button_icon_scaled = pg.transform.scale(pg.image.load(cell.button["app_icon_path"]).convert_alpha(),
                                                     (cell.button["side_length"], cell.button["side_length"]))
                 self.window.blit(button_icon_scaled, cell.button_rect)
-                print("RENDERED ->" + cell.button["app_icon_path"]) # DEBUG
+                # print("RENDERED ->" + cell.button["app_icon_path"]) # DEBUG
             else:
-                self.window.blit(pg.transform.scale(DefaultIcons.UNSET, (cell.button["side_length"], cell.button["side_length"])), cell.button_rect)
+                self.window.blit(pg.transform.scale(AppIcons.UNSET, (cell.button["side_length"], cell.button["side_length"])), cell.button_rect)
            
-            if cell.button["application_path"]:
 
+            if cell.button["application_path"]:
                 app_name_no_ext = cell._get_application_name_no_ext()
                 app_name_text = self.main_font.render(app_name_no_ext.replace('_', ' '), True, "white")
                 app_name_text_width = app_name_text.get_width()
 
                 self.window.blit(app_name_text, (cell.button_rect.topleft[0] + (cell.button['side_length'] // 2) - (app_name_text_width / 2), cell.button_rect.topleft[1] + cell.button["side_length"] * 1.1))
 
-            # --- DEBUG ---
-            # if cell.button["application_path"]:
-            #     window.blit(main_font.render("  " + str(cell.id) + " - " + str(cell.button["application_path"]), True, "white"), cell.rect)
-            # else:
-            #     window.blit(main_font.render("  " + str(cell.id), True, "white"), cell.rect)
-            # -------------
-
+    def _extract_icon_from_exe(self, cell: layout.Cell, from_lnk_file: bool = False):
+        path_to_exe: str = ""
+        if from_lnk_file:
+            path_to_exe = lnk.Lnk(cell.button["application_path"]).path
+        else:
+            path_to_exe = cell.button["application_path"]
+        extractor = icoextract.IconExtractor(path_to_exe)
+        ico_file_path = cell.button["app_icon_path"][:-4:] + '.ico'
+        extractor.export_icon(ico_file_path)
+        with Image.open(ico_file_path) as ico_file:
+            ico_file.save(cell.button["app_icon_path"])
+        remove(ico_file_path)
 
     def save_icon_to_file(self, cell: layout.Cell) -> None:
         """Uses the icoextract module to save an app's icon from it's path with a specified name in the folder './appicons'.
@@ -148,13 +167,19 @@ class App:
             mkdir("./appicons", mode=755) # perms: read/write/exec for owner, read/write for group and others
         # cmd = "cmd /c \"icoextract.exe \"" + cell.button['application_path'].replace('/', '\\') + "\" \".\\appicons\\" + cell._get_application_name_no_ext() + "\"\""
         try:
-            if cell._get_application_extension() == ".exe":
-                extractor = icoextract.IconExtractor(cell.button["application_path"])
-                ico_file_path = cell.button["app_icon_path"][:-4:] + '.ico'
-                extractor.export_icon(ico_file_path)
-                with Image.open(ico_file_path) as ico_file:
-                    ico_file.save(cell.button["app_icon_path"])
-                remove(ico_file_path)
+            if cell._get_application_extension() == ".lnk":
+                print(cell.button["application_path"])
+                # lnk_file = lnk.Lnk(cell.button["application_name"])
+                lnk_file = lnk.Lnk(cell.button["application_path"])
+                if lnk_file.icon == None or lnk_file.icon.endswith(".exe"):
+                    self._extract_icon_from_exe(cell=cell, from_lnk_file=True)
+                else:
+                    print(lnk_file.icon)
+                    with Image.open(lnk_file.icon) as ico_file:
+                        ico_file.save(cell.button["app_icon_path"])
+
+            elif cell._get_application_extension() == ".exe":
+                self._extract_icon_from_exe(cell=cell)
 
             elif cell._get_application_extension() == ".url":
                 ini_parser = ConfigParser()
@@ -166,91 +191,128 @@ class App:
                     ico_file.save(cell.button["app_icon_path"])
 
         except icoextract.NoIconsAvailableError:
-            print('WARNING - No icon avaible for ' + cell.button['application_name'])
+            print('WARNING - No icon avaible for ' + cell.button['application_name'],
+                  "\nEither it doesn't have one or it has a custom one")
 
         except FileNotFoundError as e:
             print(cell.button["app_icon_path"])
-            print("FROM save_icon_to_file: " + str(e))
+            print("FROM save_icon_to_file:")
+            traceback.print_exc()
 
-    def cb_global_hotkey_pressed(self) -> None:
-        """CALLBACK - called if the global hotkey is pressed (win+enter). Focuses the launcher if it was previously minimized."""
-        print("pressed key")
+
+    def restore_window(self) -> bool:
         if self._running:
-            self.resolution = screenutils.get_window_resolution(App.DEFAULT_WINDOW_SCALE_FACTOR)
-            self.window = pg.display.set_mode(self.resolution, flags=pg.NOFRAME, display=screenutils.get_primary_monitor_info()["id"])
-            print("restored window") # DEBUG
-            return True
+            return winutils.restore_window()
         else:
             return False
 
+
+    def cb_global_hotkey_pressed(self) -> None:
+        """CALLBACK - called if the global hotkey is pressed (win+enter). Focuses the launcher if it was previously minimized."""
+        winutils._minimize_triggered = 0
+        return self.restore_window()
+
+
+    def _update_config_single_button(self, cell: layout.Cell) -> None:
+        """updates the config dict, then saves this updated version to the config"""
+        self.config[f"{cell.id}"] = {
+            "application_path": cell.button["application_path"]
+        }
+        self.loader._save(self.config)
+
+
+    def update_single_button(self, cell: layout.Cell, executable_path: str) -> None:
+        """Changes the title of the specified cell's button to app_name"""
+        # update button in layout
+        if executable_path == "":
+            print("no app was selected")
+        else:
+            cell.button["application_path"] = executable_path
+            cell._set_application_name_from_path()
+
+        # update config and save
+        self._update_config_single_button(cell=cell)
+
+
     def handle_mouse_input(self) -> None:
-        """Takes care of handling the mouse, which currently is used to set an app to a button"""
-        if pg.mouse.get_pressed()[0]:
-                for cell in self.grid.cells:
-                    if cell.button_rect.collidepoint(pg.mouse.get_pos()):
-                        # BUTTON-APP Association:
-                        # - Open windows explorer dialogue
-                        executable_filetypes = (
-                            ("Executable program", "*.exe"),
-                            ("Executable program (legacy)", "*.com"),
-                            ("Batch script", "*.bat"),
-                            ("Python script", "*.py"),
-                            ("Powershell script", "*.ps1"),
-                            ("Steam links", ".url")
-                        )
-                        selected_app: str = filedialog.askopenfilename(filetypes=executable_filetypes,
-                                                                  title=f"Please choose the program for button ID {cell.id}")
-                        
-                        # - Set the chosen app or script with the dialogue
-                        if selected_app == "":
-                            print("no app was selected")
-                            break
-                        else:
-                            cell.button["application_path"] = selected_app
-                            cell._set_application_name_from_path()
-                        # - Add to config dict
-                        self.config[f"{cell.id}"] = {
-                            "application_path": cell.button["application_path"]
-                        }
-
-                        # - Write config dict
-                        try:
-                            self.loader._save(self.config)
-                        except Exception as e:
-                            print("could not save file!!!")
-                            print("here is your vomit cascade of a python traceback lmao")
-                            raise(e)
-
-                        # - Extract icon from exe files
-                        # if cell._get_application_extension() == '.exe':
-                        cell._set_application_icon_path_from_name()
-                        self.save_icon_to_file(cell)
-
-                        # - Update the cell icon
-                        self.draw()
-
-                        # if cell._get_application_extension() == '.url':
-                            
-                        
+        """Takes care of handling the mouse, which currently is used to set an app to a button
+        or (TODO) to change its icon"""
+        if pg.mouse.get_pressed()[0]: # = left mouse button pressed
+            for cell in self.grid.cells:
+                if cell.button_rect.collidepoint(pg.mouse.get_pos()):
+                    # BUTTON-APP Association:
+                    # - Open windows explorer dialogue
+                    selected_executable_path: str = winutils.filedialog_executable(cell.id)
+                    
+                    # - Set the chosen app or script with the dialogue
+                    if selected_executable_path == "":
+                        print("no app was selected") # debug, to be formalized
                         break
+                    else:
+                        self.update_single_button(cell, selected_executable_path)
 
-    def handle_quit_events(self) -> bool:
+                    # - Extract icon from exe files
+                    cell._set_application_icon_path_from_name()
+                    self.save_icon_to_file(cell)
+
+                    # - Update the cell icon
+                    self.draw()
+
+                    break
+
+        elif pg.mouse.get_pressed()[2]:
+            for cell in self.grid.cells:
+                if cell.button_rect.collidepoint(pg.mouse.get_pos()):
+                    selected_img_path = winutils.filedialog_image(cell.id)
+
+                    if selected_img_path == "":
+                        print("no image was selected")
+                        break
+                    else:
+                        with Image.open(selected_img_path) as img:
+                            img.save(cell.button["app_icon_path"])
+
+                    self.draw()
+
+                    break
+
+    def handle_kbd_input(self) -> None:
+        if not self._keydown:
+            for key in self.input_map.keys(): # application keys
+                if pg.key.get_pressed()[key] and not (pg.key.get_mods() & pg.KMOD_ALT): # E.g. ALT+F4 should not trigger the F4 button
+                    self._keydown = True
+                    cell = self.grid._get_cell_from_id(self.input_map[key])
+                    if cell.button["application_path"]:
+                        self.run_application(cell)
+                        pg.display.iconify()
+                    else:
+                        print("no app set for that button") # debug
+                    break
+
+    def check_events(self) -> bool:
         """Returns False if a pygame quit event occurs, otherwise returns True. The return value
-        should be stored in the variable that determines whether to keep running the event loop or not."""
+        should be stored in the variable that determines whether to keep running the event loop or not.
+        Also redraws the window if the respective timer ran out"""
         for event in pg.event.get():
                 if event.type == pg.QUIT:
                     return False
-        if pg.key.get_pressed()[pg.K_ESCAPE]:
-            return False
+                if event.type == REDRAWEVENT:
+                    self.draw()
+                if event.type == pg.KEYUP:
+                    self._keydown = False
         return True
     
     def handle_minimize_events(self) -> None:
-        """Minimizes the window if either ESC or Q is pressed"""
-        if pg.key.get_pressed()[pg.K_q]:
-            pg.display.iconify()
+        """Hides the window if either ESC or Q is pressed"""
+        minimize_keys = [pg.K_q, pg.K_ESCAPE]
+        for key in minimize_keys:
+            if pg.key.get_pressed()[key]:
+                pg.display.iconify()
+        winutils.minimize_if_unfocused()
     
     def set_window_transparent(self):
-        """Nobody knows how this works. But it does. That's the beauty of abstraction and of StackOverflow."""
+        """Just works\n
+        Nobody knows how this works. But it does. That's the beauty of StackOverflow."""
         hwnd = pg.display.get_wm_info()["window"]
         # Getting information of the current active window
         win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE) | win32con.WS_EX_LAYERED)
@@ -261,8 +323,12 @@ class App:
         # pygame window initialization and setup
         self.window = pg.display.set_mode(self.resolution, flags=pg.NOFRAME, display=screenutils.get_primary_monitor_info()["id"])
         pg.display.set_icon(pg.image.load("./assets/icons/logo.png"))
+        pg.display.set_caption("QLauncher")
         pg.display.iconify()
         self.set_window_transparent()
+
+        # set a timer to redraw everything in the window every 2s (probably snake oil)
+        pg.time.set_timer(REDRAWEVENT, 2000)
 
         # Load configuration
         try:
@@ -270,7 +336,7 @@ class App:
             # print("loaded configuration")
             self.set_apps_from_config()
             self.extract_icons_from_config()
-
+            # self.
 
         except FileNotFoundError as excp:
 
@@ -285,21 +351,21 @@ class App:
                 quit(1)
 
         # draws once before event loop. elements are rendered again only when actual changes happen
-        # to decrease useless operations
+        # to decrease resource usage
         self.draw()
 
         clk = pg.time.Clock()
         while self._running:
             # clock
-            clk.tick(60)
+            clk.tick(screenutils.get_primary_monitor_refreshrate())
 
-            # Handle quit events
-            self._running = self.handle_quit_events() # will become False when quit event occurs
-            
+            # Handle quit events and timer to redraw window
+            self._running = self.check_events() # will become False when quit event occurs
+
             # Handle minimizing events
             self.handle_minimize_events()
 
-            # Handle app opening (keyboard) and app setting (mouse)
+            # Handle app opening (keyboard) and app/icon setting (mouse)
             self.handle_mouse_input()
             self.handle_kbd_input()
 
@@ -311,7 +377,6 @@ class App:
 
 def main():
     app = App()
-    app.global_hotkey_listener.start()
     try:
         app.run()
     except KeyboardInterrupt:

@@ -1,5 +1,7 @@
 icoextract==0.1.4
+keyboard==0.13.5
 pefile==2023.2.7
+Pillow==10.0.0
 pygame==2.5.0
 pynput==1.7.6
 pywin32==306

@@ -73,8 +73,8 @@ class Grid:
         self.columns = columns
 
         # init cell variables
-        self.cell_width = screenutils.get_window_resolution(0.75)[0] // self.columns
-        self.cell_height = screenutils.get_window_resolution(0.75)[1] // self.rows
+        self.cell_width = screenutils.calc_window_resolution(0.75)[0] // self.columns
+        self.cell_height = screenutils.calc_window_resolution(0.75)[1] // self.rows
         self.cells: list[Cell] = []
 
         # init button variables
