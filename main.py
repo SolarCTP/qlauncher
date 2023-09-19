@@ -79,13 +79,12 @@ class App:
             return
         elif cell._get_application_extension() == ".lnk":
             lnk_file = lnk.Lnk(cell.button["application_path"])
-            cmd = [lnk_file.path] # read exe from .lnk file
-            print("Running: " + cmd[0]) # debug
-            Popen(cmd,
+            cmd = [lnk_file.path, lnk_file.arguments] # read exe from .lnk file + any arguments
+            print("Running: " + " ".join(cmd)) # debug
+            run_cmd = Popen(cmd,
                   creationflags=DETACHED_PROCESS,
                   shell=True if "%" in cmd[0] else False #use shell if there are any %env_variables%
                   )
-            print("successful")
         else:
             cmd = [cell.button["application_path"]]
             print("Running: " + cmd[0]) # debug
@@ -130,11 +129,17 @@ class App:
             self.window.blit(keybind_text, (keybind_slot_rect.centerx + (cell.button['side_length'] // 6) - (keybind_text_width / 2), keybind_slot_rect.midleft[1] - (keybind_text_height // 2)))
 
 
-            if exists(cell.button["app_icon_path"]):
+            # if exists(cell.button["app_icon_path"]):
+            #     button_icon_scaled = pg.transform.scale(pg.image.load(cell.button["app_icon_path"]).convert_alpha(),
+            #                                         (cell.button["side_length"], cell.button["side_length"]))
+            #     self.window.blit(button_icon_scaled, cell.button_rect)
+            # else:
+            #     self.window.blit(pg.transform.scale(AppIcons.UNSET, (cell.button["side_length"], cell.button["side_length"])), cell.button_rect)
+            try:
                 button_icon_scaled = pg.transform.scale(pg.image.load(cell.button["app_icon_path"]).convert_alpha(),
                                                     (cell.button["side_length"], cell.button["side_length"]))
                 self.window.blit(button_icon_scaled, cell.button_rect)
-            else:
+            except FileNotFoundError:
                 self.window.blit(pg.transform.scale(AppIcons.UNSET, (cell.button["side_length"], cell.button["side_length"])), cell.button_rect)
            
 
